@@ -1,0 +1,494 @@
+﻿using System.Collections.Generic;
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Transforms;
+using UnityEngine;
+
+namespace _Game_.Scripts.Systems.Player
+{
+    [BurstCompile, UpdateInGroup(typeof(InitializationSystemGroup))]
+    public partial struct CharacterSystem : ISystem
+    {
+        private EntityQuery _enQueryCharacterTakeDamage;
+        private EntityTypeHandle _entityTypeHandle;
+        private EntityManager _entityManager;
+        private NativeQueue<Entity> _characterDieQueue;
+        private EntityQuery _enQueryMove;
+        private EntityQuery _enQueryCharacterMove;
+        private bool _isInit;
+        private float _characterMoveToWardChangePos;
+        private PlayerProperty _playerProperty;
+        private NativeList<TargetInfo> _targetNears;
+        private PlayerInput _playerMoveInput;
+        private float2 _currentDirectMove;
+        private float _divisionAngle;
+        private ComponentTypeHandle<LocalToWorld> _ltwTypeHandle;
+        private ComponentTypeHandle<LocalTransform> _ltTypeHandle;
+        private ComponentTypeHandle<TakeDamage> _takeDamageTypeHandle;
+        private ComponentTypeHandle<CharacterInfo> _characterInfoTypeHandle;
+        private ComponentTypeHandle<NextPoint> _nextPointTypeHandle;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            RequireNecessaryComponents(ref state);
+            Init(ref state);
+        }
+
+        [BurstCompile]
+        private void Init(ref SystemState state)
+        {
+            _ltwTypeHandle = state.GetComponentTypeHandle<LocalToWorld>();
+            _ltTypeHandle = state.GetComponentTypeHandle<LocalTransform>();
+            _takeDamageTypeHandle = state.GetComponentTypeHandle<TakeDamage>();
+            _characterInfoTypeHandle = state.GetComponentTypeHandle<CharacterInfo>();
+            _nextPointTypeHandle = state.GetComponentTypeHandle<NextPoint>();
+            _entityTypeHandle = state.GetEntityTypeHandle();
+            _enQueryCharacterTakeDamage = SystemAPI.QueryBuilder().WithAll<CharacterInfo, TakeDamage>()
+                .WithNone<Disabled, SetActiveSP, AddToBuffer>().Build();
+            _characterDieQueue = new NativeQueue<Entity>(Allocator.Persistent);
+            _enQueryMove = SystemAPI.QueryBuilder().WithAll<CharacterInfo, NextPoint>()
+                .WithNone<Disabled, SetActiveSP>()
+                .Build();
+            _enQueryCharacterMove = SystemAPI.QueryBuilder().WithAll<CharacterInfo>()
+                .WithNone<Disabled, SetActiveSP, AddToBuffer>()
+                .Build();
+            _targetNears = new NativeList<TargetInfo>(Allocator.Persistent);
+        }
+
+        [BurstCompile]
+        private void RequireNecessaryComponents(ref SystemState state)
+        {
+            state.RequireForUpdate<PlayerProperty>();
+            state.RequireForUpdate<PlayerInput>();
+            state.RequireForUpdate<PlayerInfo>();
+            state.RequireForUpdate<CharacterInfo>();
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            if (_targetNears.IsCreated) _targetNears.Dispose();
+            if (_characterDieQueue.IsCreated) _characterDieQueue.Dispose();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            if (!CheckAndInit(ref state)) return;
+            HandleAnimation(ref state);
+            CheckTakeDamage(ref state);
+            Rota(ref state);
+            Move(ref state);
+        }
+
+        [BurstCompile]
+        private bool CheckAndInit(ref SystemState state)
+        {
+            if (!_isInit)
+            {
+                _isInit = true;
+                _entityManager = state.EntityManager;
+                _playerProperty = SystemAPI.GetSingleton<PlayerProperty>();
+                _divisionAngle = _playerProperty.divisionAngle;
+                _characterMoveToWardChangePos = _playerProperty.speedMoveToNextPoint;
+            }
+
+            _playerMoveInput = SystemAPI.GetSingleton<PlayerInput>();
+            return true;
+        }
+
+
+        [BurstCompile]
+        private void HandleAnimation(ref SystemState state)
+        {
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+            if (!_playerMoveInput.directMove.ComparisionEqual(_currentDirectMove))
+            {
+                _currentDirectMove = _playerMoveInput.directMove;
+                StateID stateID = _currentDirectMove.ComparisionEqual(float2.zero) ? StateID.None : StateID.Run;
+                foreach (var (characterInfo, entity) in SystemAPI.Query<RefRO<CharacterInfo>>().WithEntityAccess()
+                             .WithNone<Disabled, SetAnimationSP>())
+                {
+                    ecb.AddComponent(entity, new SetAnimationSP()
+                    {
+                        state = stateID,
+                    });
+                }
+            }
+            else
+            {
+                StateID stateID = _currentDirectMove.ComparisionEqual(float2.zero) ? StateID.None : StateID.Run;
+
+                foreach (var (info, entity) in SystemAPI.Query<RefRO<CharacterInfo>>().WithEntityAccess().WithAll<New>()
+                             .WithNone<Disabled, AddToBuffer>())
+                {
+                    ecb.AddComponent(entity, new SetAnimationSP()
+                    {
+                        state = stateID,
+                    });
+                    ecb.RemoveComponent<New>(entity);
+                }
+            }
+
+            ecb.Playback(_entityManager);
+            ecb.Dispose();
+        }
+
+        [BurstCompile]
+        private void Rota(ref SystemState state)
+        {
+            if (_playerProperty.rotaWithCamera) return;
+            var playerLTW = SystemAPI.GetComponentRO<LocalToWorld>(SystemAPI.GetSingletonEntity<PlayerInfo>()).ValueRO;
+            var directRota = math.forward();
+            var distanceNearest = float.MaxValue;
+            var positionNearest = float3.zero;
+            var direct = float3.zero;
+            var speed = 0.0f;
+            var moveToWard = _playerProperty.moveToWardMax;
+            var deltaTime = SystemAPI.Time.DeltaTime;
+            if (_playerProperty.aimNearestEnemy)
+            {
+                bool check = UpdateTargetNears(ref state, playerLTW.Position, ref distanceNearest, ref positionNearest,
+                    ref direct, ref speed);
+                if (check)
+                {
+                    var mulValue = math.remap(0, _playerProperty.distanceAim, 7, 2, distanceNearest);
+                    mulValue = math.max(mulValue, 1);
+                    var positionNearestNextFrame = positionNearest + direct * speed * deltaTime * mulValue;
+                    directRota = positionNearestNextFrame - playerLTW.Position;
+                    moveToWard = math.remap(_playerProperty.distanceAim, 0, _playerProperty.moveToWardMin,
+                        _playerProperty.moveToWardMax, distanceNearest);
+                    moveToWard = math.max(moveToWard, 0);
+                }
+            }
+            else
+            {
+                directRota = _playerMoveInput.directMouse;
+                moveToWard = _playerProperty.moveToWardMax;
+            }
+
+            _ltTypeHandle.Update(ref state);
+            _ltwTypeHandle.Update(ref state);
+            var job = new CharacterRotaJOB()
+            {
+                aimNearestEnemy = _playerProperty.aimNearestEnemy,
+                ltComponentType = _ltTypeHandle,
+                ltwComponentType = _ltwTypeHandle,
+                targetNears = _targetNears,
+                playerProperty = _playerProperty,
+                deltaTime = SystemAPI.Time.DeltaTime,
+                directRota = directRota,
+                moveToWard = moveToWard,
+                divisionAngle = _divisionAngle,
+            };
+            state.Dependency = job.ScheduleParallel(_enQueryCharacterMove, state.Dependency);
+            state.Dependency.Complete();
+        }
+
+        [BurstCompile]
+        private bool UpdateTargetNears(ref SystemState state, float3 playerPosition, ref float distanceNearest,
+            ref float3 positionNearest, ref float3 direct, ref float speed)
+        {
+            _targetNears.Clear();
+            bool check = false;
+            foreach (var (ltw, zombieInfo) in SystemAPI.Query<RefRO<LocalToWorld>, RefRO<ZombieInfo>>()
+                         .WithNone<Disabled, SetActiveSP, AddToBuffer>())
+            {
+                var posTarget = ltw.ValueRO.Position;
+
+                float distance = math.distance(playerPosition, posTarget);
+
+                if (distance <= distanceNearest)
+                {
+                    distanceNearest = distance;
+                    if (_playerProperty.aimType == AimType.TeamAim)
+                    {
+                        // if (MathExt.CalculateAngle(posTarget - playerPosition, new float3(0, 0, 1)) < _playerProperty.rotaAngleMax)
+                        // {
+                        //     positionNearest = posTarget;
+                        //     distanceNearest = distance;
+                        //     check = true;
+                        // }
+                        positionNearest = posTarget;
+                        distanceNearest = distance;
+                        direct = zombieInfo.ValueRO.currentDirect;
+                        speed = zombieInfo.ValueRO.speed;
+                        check = true;
+                        continue;
+                    }
+
+
+                    _targetNears.Add(new TargetInfo()
+                    {
+                        position = posTarget,
+                        distance = distance,
+                        direct = zombieInfo.ValueRO.currentDirect,
+                        speed = zombieInfo.ValueRO.speed,
+                    });
+                }
+            }
+            foreach (var ltw in SystemAPI.Query<RefRO<LocalToWorld>>().WithAll<ItemCanShoot>()
+                         .WithNone<Disabled, SetActiveSP>())
+            {
+                var posTarget = ltw.ValueRO.Position;
+                float distance = math.distance(playerPosition, posTarget);
+                if (distance <= distanceNearest)
+                {
+                    distanceNearest = distance;
+                    if (_playerProperty.aimType == AimType.TeamAim)
+                    {
+                        // if (MathExt.CalculateAngle(posTarget - playerPosition, new float3(0, 0, 1)) < _playerProperty.rotaAngleMax)
+                        // {
+                        //     positionNearest = posTarget;
+                        //     distanceNearest = distance;
+                        //     check = true;
+                        // }
+
+                        positionNearest = posTarget;
+                        speed = 0;
+                        check = true;
+                        continue;
+                    }
+
+                    _targetNears.Add(new TargetInfo()
+                    {
+                        position = ltw.ValueRO.Position,
+                        distance = distance
+                    });
+                }
+            }
+
+            if (_targetNears.Length > 20)
+            {
+                _targetNears.Sort(new TargetInfoComparer());
+                _targetNears.Resize(20, NativeArrayOptions.ClearMemory);
+            }
+
+            return check;
+        }
+
+        [BurstCompile]
+        private void Move(ref SystemState state)
+        {
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
+            _entityTypeHandle.Update(ref state);
+            var listNextPointEntity = _enQueryMove.ToEntityArray(Allocator.Temp);
+            listNextPointEntity.Dispose();
+            _ltTypeHandle.Update(ref state);
+            _ltwTypeHandle.Update(ref state);
+            _nextPointTypeHandle.Update(ref state);
+            var job = new CharacterMoveNextPointJOB()
+            {
+                deltaTime = SystemAPI.Time.DeltaTime,
+                ecb = ecb.AsParallelWriter(),
+                entityTypeHandle = _entityTypeHandle,
+                ltComponentType = _ltTypeHandle,
+                moveToWardValue = _characterMoveToWardChangePos,
+                nextPointComponentType = _nextPointTypeHandle
+            };
+
+            state.Dependency = job.ScheduleParallel(_enQueryMove, state.Dependency);
+            state.Dependency.Complete();
+            ecb.Playback(_entityManager);
+            ecb.Dispose();
+        }
+
+        [BurstCompile]
+        private void CheckTakeDamage(ref SystemState state)
+        {
+            EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
+            _characterDieQueue.Clear();
+            _entityTypeHandle.Update(ref state);
+            _takeDamageTypeHandle.Update(ref state);
+            _characterInfoTypeHandle.Update(ref state);
+            var job = new CharacterHandleTakeDamageJOB()
+            {
+                ecb = ecb.AsParallelWriter(),
+                characterInfoTypeHandle = _characterInfoTypeHandle,
+                entityTypeHandle = _entityTypeHandle,
+                takeDamageTypeHandle = _takeDamageTypeHandle,
+                characterDieQueue = _characterDieQueue.AsParallelWriter(),
+            };
+            state.Dependency = job.ScheduleParallel(_enQueryCharacterTakeDamage, state.Dependency);
+            state.Dependency.Complete();
+            while (_characterDieQueue.TryDequeue(out var queue))
+            {
+                ecb.AddComponent(queue, new SetAnimationSP()
+                {
+                    state = StateID.Die,
+                    timeDelay = 4,
+                });
+                ecb.AddComponent<AddToBuffer>(queue);
+            }
+
+            ecb.Playback(_entityManager);
+            ecb.Dispose();
+        }
+
+        private struct TargetInfoComparer : IComparer<TargetInfo>
+        {
+            public int Compare(TargetInfo x, TargetInfo y)
+            {
+                return x.distance.CompareTo(y.distance);
+            }
+        }
+
+        [BurstCompile]
+        partial struct CharacterRotaJOB : IJobChunk
+        {
+            public ComponentTypeHandle<LocalTransform> ltComponentType;
+            [ReadOnly] public bool aimNearestEnemy;
+            [ReadOnly] public ComponentTypeHandle<LocalToWorld> ltwComponentType;
+            [ReadOnly] public NativeList<TargetInfo> targetNears;
+            [ReadOnly] public PlayerProperty playerProperty;
+            [ReadOnly] public float deltaTime;
+            [ReadOnly] public float3 directRota;
+            [ReadOnly] public float moveToWard;
+            [ReadOnly] public float divisionAngle;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var lts = chunk.GetNativeArray(ref ltComponentType);
+                var ltws = chunk.GetNativeArray(ref ltwComponentType);
+                for (var i = 0; i < chunk.Count; i++)
+                {
+                    var directRota_ = directRota;
+                    var moveToWard_ = moveToWard;
+                    var lt = lts[i];
+
+                    LoadDirectRota(ref directRota_, ref moveToWard_, ltws[i].Position);
+                    if (!directRota_.Equals(float3.zero))
+                    {
+                        lt.Rotation = MathExt.MoveTowards(lt.Rotation,
+                            quaternion.LookRotationSafe(directRota_, math.up()),
+                            deltaTime * moveToWard_);
+                    }
+
+                    lts[i] = lt;
+                }
+            }
+
+            private void LoadDirectRota(ref float3 directRef, ref float moveToWardRef, float3 characterPos)
+            {
+                if (playerProperty.aimType != AimType.IndividualAim || !aimNearestEnemy) return;
+                var disNearest = float.MaxValue;
+                int indexChoose = -1;
+                directRef = math.forward();
+                moveToWardRef = playerProperty.moveToWardMin;
+                for (int i = 0; i < targetNears.Length; i++)
+                {
+                    var enemyPos = targetNears[i];
+                    var distance = math.distance(enemyPos.position, characterPos);
+                    if (distance < disNearest)
+                    {
+                        indexChoose = i;
+                        disNearest = distance;
+                    }
+                }
+
+                if (indexChoose >= 0)
+                {
+                    var enemyTarget = targetNears[indexChoose];
+                    var mulValue = math.remap(0, playerProperty.distanceAim, 6, 2, disNearest);
+
+                    mulValue = math.max(mulValue, 1);
+
+                    var nearestEnemyPositionNextTime = enemyTarget.position +
+                                                       enemyTarget.direct * deltaTime * enemyTarget.speed * mulValue;
+                    directRef = nearestEnemyPositionNextTime - characterPos;
+                    moveToWardRef = math.remap(playerProperty.distanceAim, 0, playerProperty.moveToWardMin,
+                        playerProperty.moveToWardMax, disNearest);
+                }
+            }
+        }
+
+        [BurstCompile]
+        partial struct CharacterHandleTakeDamageJOB : IJobChunk
+        {
+            public NativeQueue<Entity>.ParallelWriter characterDieQueue;
+            public EntityCommandBuffer.ParallelWriter ecb;
+            public ComponentTypeHandle<CharacterInfo> characterInfoTypeHandle;
+            public EntityTypeHandle entityTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<TakeDamage> takeDamageTypeHandle;
+            [ReadOnly] public float characterRadius;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var characterInfos = chunk.GetNativeArray(ref characterInfoTypeHandle);
+                var takeDamages = chunk.GetNativeArray(ref takeDamageTypeHandle);
+                var entities = chunk.GetNativeArray(entityTypeHandle);
+
+                for (int i = 0; i < chunk.Count; i++)
+                {
+                    var info = characterInfos[i];
+                    var takeDamage = takeDamages[i];
+                    var entity = entities[i];
+                    info.hp -= takeDamage.value;
+                    characterInfos[i] = info;
+                    ecb.RemoveComponent<TakeDamage>(unfilteredChunkIndex, entity);
+                    if (info.hp <= 0)
+                    {
+                        ecb.RemoveComponent<LocalTransform>(unfilteredChunkIndex, entity);
+                        ecb.RemoveComponent<Parent>(unfilteredChunkIndex, entity);
+                        characterDieQueue.Enqueue(entity);
+                        if (!info.weaponEntity.Equals(default))
+                        {
+                            ecb.RemoveComponent<Parent>(unfilteredChunkIndex, info.weaponEntity);
+                            ecb.AddComponent(unfilteredChunkIndex, info.weaponEntity, new SetActiveSP()
+                            {
+                                state = DisableID.Disable,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        partial struct CharacterMoveNextPointJOB : IJobChunk
+        {
+            public EntityCommandBuffer.ParallelWriter ecb;
+            public EntityTypeHandle entityTypeHandle;
+            public ComponentTypeHandle<LocalTransform> ltComponentType;
+            [ReadOnly] public float deltaTime;
+            [ReadOnly] public float moveToWardValue;
+            [ReadOnly] public ComponentTypeHandle<NextPoint> nextPointComponentType;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var lts = chunk.GetNativeArray(ref ltComponentType);
+                var nextPoints = chunk.GetNativeArray(ref nextPointComponentType);
+                var entities = chunk.GetNativeArray(entityTypeHandle);
+
+                for (int i = 0; i < chunk.Count; i++)
+                {
+                    var lt = lts[i];
+                    var nextPoint = nextPoints[i].value;
+                    if (lt.Position.ComparisionEqual(nextPoint))
+                    {
+                        ecb.RemoveComponent<NextPoint>(unfilteredChunkIndex, entities[i]);
+                        continue;
+                    }
+
+                    lt.Position = MathExt.MoveTowards(lt.Position, nextPoint, deltaTime * moveToWardValue);
+                    lts[i] = lt;
+                }
+            }
+        }
+
+        private struct TargetInfo
+        {
+            public float3 position;
+            public float distance;
+            public float3 direct;
+            public float speed;
+        }
+    }
+}
