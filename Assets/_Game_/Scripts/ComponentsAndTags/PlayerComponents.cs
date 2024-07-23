@@ -17,11 +17,8 @@ public struct PlayerProperty : IComponentData
     public float moveToWardMax;
     public float moveToWardMin;
     public float speedMoveToNextPoint;
-    public float rotaAngleMax;
     public bool aimNearestEnemy;
-    public float divisionAngle;
     public bool autoMoveOnVehicle;
-    public bool rotaWithCamera;
 }
 
 public struct PlayerInfo : IComponentData

@@ -35,6 +35,8 @@ public struct TextMeshData : IComponentData
     public int id;
     public FixedString32Bytes text;
     public Vector3 position;
+    public Vector3 offset;
+    public bool textFollowPlayer;
 }
 
 public struct BufferSpawnPoint : IBufferElementData
@@ -96,6 +98,17 @@ public struct BarrelInfo : IComponentData
 public struct BarrelCanSetup : IComponentData
 {
     public int id;
+}
+
+[MaterialProperty("_isHit")]
+public struct HitCheckOverride : IComponentData
+{
+    public float Value;
+}
+
+public struct HitCheckTime : IComponentData
+{
+    public float time;
 }
 
 //Enum

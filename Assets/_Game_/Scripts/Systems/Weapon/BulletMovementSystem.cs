@@ -13,7 +13,7 @@ using RaycastHit = Unity.Physics.RaycastHit;
 [BurstCompile]
 public partial struct BulletMovementSystem : ISystem
 {
-    private bool _isGetComponent;
+    private bool _isInit;
     private EntityManager _entityManager;
     private WeaponProperty _weaponProperties;
     private EntityTypeHandle _entityTypeHandle;
@@ -63,20 +63,24 @@ public partial struct BulletMovementSystem : ISystem
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        if (!_isGetComponent)
-        {
-            _entityManager = state.EntityManager;
-            _isGetComponent = true;
-            _weaponProperties = SystemAPI.GetSingleton<WeaponProperty>();
-            var layerStore = SystemAPI.GetSingleton<LayerStoreComponent>();
-            _collisionFilter = new CollisionFilter()
-            {
-                BelongsTo = layerStore.bulletLayer,
-                CollidesWith = layerStore.enemyLayer | layerStore.itemCanShootLayer,
-            };
-        }
+        if (!CheckAndInit(ref state)) return;
         
         MovementBulletAndCheckExpiredBullet(ref state);
+    }
+
+    private bool CheckAndInit(ref SystemState state)
+    {
+        if (_isInit) return true;
+        _entityManager = state.EntityManager;
+        _weaponProperties = SystemAPI.GetSingleton<WeaponProperty>();
+        var layerStore = SystemAPI.GetSingleton<LayerStoreComponent>();
+        _collisionFilter = new CollisionFilter()
+        {
+            BelongsTo = layerStore.bulletLayer,
+            CollidesWith = layerStore.enemyLayer | layerStore.itemCanShootLayer,
+        };
+        _isInit = true;
+        return false;
     }
 
     [BurstCompile]
@@ -176,27 +180,23 @@ public partial struct BulletMovementSystem : ISystem
             {
                 effectID = EffectID.HitFlash,
             };
-            var ltHide = new LocalTransform()
-            {
-                Scale = 1,
-                Position = new float3(999, 999, 999),
-            };
-            
             for (int i = 0; i < chunk.Count; i++)
             {
 
                 var entity = entities[i];
                 var bulletInfo = bulletInfos[i];
+                var lt = ltArr[i];
                 if ((currentTime - bulletInfo.startTime) >= expired)
                 {
-                    ltArr[i] = ltHide;
+                    lt.Position = new float3(999, 999, 999);
+                    ltArr[i] = lt;
                     // ecb.SetComponent(unfilteredChunkIndex,entity,ltHide);
                     ecb.AddComponent<AddToBuffer>(unfilteredChunkIndex,entity);
                     ecb.AddComponent(unfilteredChunkIndex,entity,setActiveSP);
                     continue;
                 }
                 
-                var lt = ltArr[i];
+                
                 float speed_New = Random.CreateFromIndex((uint)(i + 1 + (time % deltaTime)))
                     .NextFloat(bulletInfo.speed - 10f, bulletInfo.speed + 10f);
                 float3 newPosition = lt.Position + lt.Forward() * speed_New * deltaTime;
@@ -214,13 +214,13 @@ public partial struct BulletMovementSystem : ISystem
                         damage = bulletInfo.damage,
                         entity = hit.Entity,
                     });
-                    
-                    ecb.SetComponent(unfilteredChunkIndex,entity,ltHide);
+                    lt.Position = new float3(999, 999, 999);
+                    ecb.SetComponent(unfilteredChunkIndex,entity,lt);
                     ecb.AddComponent<AddToBuffer>(unfilteredChunkIndex,entity);
                     ecb.AddComponent(unfilteredChunkIndex, entity, setActiveSP);
                     eff.position = hit.Position;
                     eff.rotation = quaternion.LookRotationSafe(hit.SurfaceNormal, math.up());
-                    ecb.AddComponent(unfilteredChunkIndex, hit.Entity, eff);
+                    ecb.AddComponent(unfilteredChunkIndex, ecb.CreateEntity(unfilteredChunkIndex), eff);
                 }
                 else
                 {

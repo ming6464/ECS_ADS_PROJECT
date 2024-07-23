@@ -1,4 +1,5 @@
-﻿﻿using _Game_.Scripts.Data;
+﻿﻿using System;
+ using _Game_.Scripts.Data;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -56,41 +57,62 @@ namespace _Game_.Scripts.Systems.Other
             _buffetObstacle = SystemAPI.GetSingletonBuffer<BufferTurretObstacle>().ToNativeArray(Allocator.Persistent);
             _time = (float)SystemAPI.Time.ElapsedTime;
             return false;
-
         }
 
         [BurstCompile]
         private void CheckItemShooting(ref SystemState state)
         {
-            return;
             EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (itemInfo, takeDamage, entity) in SystemAPI.Query<RefRW<ItemInfo>, RefRO<TakeDamage>>()
-                         .WithEntityAccess())
+
+
+            var time = (float)SystemAPI.Time.ElapsedTime;
+            float timeEffect = 0.1f;
+
+            foreach (var (hitCheckOverride, hitTime, entity) in SystemAPI
+                         .Query<RefRW<HitCheckOverride>, RefRW<HitCheckTime>>().WithEntityAccess().WithAll<ItemInfo>().WithNone<Disabled,TakeDamage>())
+            {
+                if(time - hitTime.ValueRO.time < timeEffect) continue;
+                hitCheckOverride.ValueRW.Value -= 1;
+
+                if (hitCheckOverride.ValueRO.Value > 0)
+                {
+                    hitTime.ValueRW.time = time - timeEffect / 2f;
+                }
+                else
+                {
+                    ecb.RemoveComponent<HitCheckTime>(entity);
+                }
+            }
+            
+            
+            var hitCheckTime = new HitCheckTime()
+            {
+                time = time,
+            };
+            foreach (var (itemInfo, takeDamage,hitCheckOverride, entity) in SystemAPI.Query<RefRW<ItemInfo>, RefRO<TakeDamage>,RefRW<HitCheckOverride>>()
+                         .WithEntityAccess().WithNone<Disabled,AddToBuffer>())
             {
                 itemInfo.ValueRW.hp -= (int)takeDamage.ValueRO.value;
                 ecb.RemoveComponent<TakeDamage>(entity);
                 ecb.AddComponent(entity,new TextMeshData()
                 {
                     id = itemInfo.ValueRO.idTextHp,
-                    text = itemInfo.ValueRW.hp.ToString(),
+                    text = itemInfo.ValueRO.hp.ToString(),
                 });
                 if (itemInfo.ValueRO.hp <= 0)
                 {
                     var entityNEw = ecb.CreateEntity();
                     var entityChangeText = ecb.CreateEntity();
-                    
                     ecb.AddComponent(entityChangeText, new TextMeshData()
                     {
                         id = itemInfo.ValueRO.idTextHp,
                         text = "0",
                     });
-                    
                     if (_entityManager.HasBuffer<BufferSpawnPoint>(entity))
                     {
                         var buffer = ecb.AddBuffer<BufferSpawnPoint>(entityNEw);
                         buffer.CopyFrom(_entityManager.GetBuffer<BufferSpawnPoint>(entity));
                     }
-                    
                     ecb.AddComponent(entityNEw,new ItemCollection()
                     {
                         count = itemInfo.ValueRO.count,
@@ -104,7 +126,33 @@ namespace _Game_.Scripts.Systems.Other
                         state = DisableID.DestroyAll
                     });
                 }
+                else
+                {
+                    if (_entityManager.HasComponent<HitCheckTime>(entity))
+                    {
+                        var hitCheck = _entityManager.GetComponentData<HitCheckTime>(entity);
+                        if(time - hitCheck.time < timeEffect) continue;
+                    }
+                    
+                    
+                    
+                    var value = hitCheckOverride.ValueRW.Value;
+                    
+                    value += 1;
+                    if (value > 2)
+                    {
+                        value = 1;
+                    }
+
+                    if (value - 1 == 0)
+                    {
+                        hitCheckTime.time -= timeEffect / 2f;
+                    }
+                    ecb.AddComponent(entity,hitCheckTime);
+                    hitCheckOverride.ValueRW.Value = value;
+                }
             }
+            
             ecb.Playback(_entityManager);
             ecb.Dispose();
         }
@@ -143,6 +191,7 @@ namespace _Game_.Scripts.Systems.Other
                 id = -1,
             };
         }
+        
         [BurstCompile]
         private void SpawnTurret(ref SystemState state,ref EntityCommandBuffer ecb,ItemCollection itemCollection)
         {

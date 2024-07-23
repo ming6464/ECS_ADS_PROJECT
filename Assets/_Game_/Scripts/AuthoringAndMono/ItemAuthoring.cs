@@ -13,6 +13,7 @@ public class ItemAuthoring : MonoBehaviour
     public int count;
     public Operation operation;
     public Transform textPositon;
+    public bool followPlayer;
     [Header("Item Obstacle")]
     public Transform[] spawnPoints;
     [Header("------")] 
@@ -51,7 +52,7 @@ public class ItemAuthoring : MonoBehaviour
     {
         public override void Bake(ItemAuthoring authoring)
         {
-            return;
+            var textObj = authoring.textPositon;
             Entity entity = GetEntity(TransformUsageFlags.None);
             AddComponent(entity,new ItemInfo()
             {
@@ -60,8 +61,10 @@ public class ItemAuthoring : MonoBehaviour
                 count = authoring.count,
                 hp = authoring.count,
                 operation = authoring.operation,
-                idTextHp = entity.Index
+                idTextHp = entity.Index,
             });
+            
+            AddComponent<HitCheckOverride>(entity);
             
             if (authoring.typeUsing.Equals(TypeUsing.canShooting))
             {
@@ -70,7 +73,9 @@ public class ItemAuthoring : MonoBehaviour
                 {
                     id = entity.Index,
                     text = authoring.count.ToString(),
-                    position = authoring.textPositon.position
+                    position = textObj.parent.position,
+                    offset =  textObj.position - textObj.parent.position,
+                    textFollowPlayer = authoring.followPlayer
                 });
             }else if (authoring.type.Equals(ItemType.Character))
             {
@@ -90,11 +95,16 @@ public class ItemAuthoring : MonoBehaviour
                         str = ":";
                         break;
                 }
+
+                
                 AddComponent(entity,new TextMeshData()
                 {
                     id = entity.Index,
                     text = str +authoring.count,
-                    position = authoring.textPositon.position
+                    position = textObj.parent.position,
+                    offset =  textObj.position - textObj.parent.position,
+                    textFollowPlayer = authoring.followPlayer
+                    
                 });
             }
             

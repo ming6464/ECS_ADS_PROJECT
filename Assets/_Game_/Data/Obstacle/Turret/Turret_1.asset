@@ -23,7 +23,7 @@ MonoBehaviour:
   spacePerBullet: 0.2
   spaceAnglePerBullet: 1
   parallelOrbit: 1
-  speed: 80
+  speed: 250
   damage: 30
   cooldown: 0.1
   distanceAim: 200

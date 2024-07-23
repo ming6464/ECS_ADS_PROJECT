@@ -189,6 +189,7 @@ MonoBehaviour:
   count: 0
   operation: 0
   textPositon: {fileID: 2667146269360124253}
+  followPlayer: 1
   spawnPoints:
   - {fileID: 8568189371391832198}
   - {fileID: 1780348587657674778}

@@ -113,7 +113,7 @@ public partial struct ZombieSystem : ISystem
     {
         if(!_zombieProperty.comparePriorities) return;
         
-        UpdatePriority(ref state);
+        //UpdatePriority(ref state);
         
         var avoidDatas = new NativeList<AvoidData>(Allocator.TempJob);
 
@@ -136,7 +136,7 @@ public partial struct ZombieSystem : ISystem
             ecb = ecb.AsParallelWriter(),
         };
 
-        state.Dependency = job.Schedule(avoidDatas.Length, (int)avoidDatas.Length / 100);
+        state.Dependency = job.Schedule(avoidDatas.Length, (int)avoidDatas.Length /40);
         state.Dependency.Complete();
         ecb.Playback(_entityManager);
         ecb.Dispose();
@@ -537,7 +537,8 @@ public partial struct ZombieSystem : ISystem
             for(int i = 0;i < avoidDatas.Length; i++)
             {
                 var dataSet = avoidDatas[i];
-                if (dataSet.info.priority > avoidData.info.priority || i == index) continue;
+                // if (dataSet.info.priority > avoidData.info.priority || i == index) continue;
+                if(i == index) continue;
                 var distance = math.distance(dataSet.lt.Position, avoidData.lt.Position);
                 var overlappingDistance = (dataSet.info.radius + avoidData.info.radius) - distance;
                 if (overlappingDistance <= zombieProperty.minDistanceAvoid) continue;

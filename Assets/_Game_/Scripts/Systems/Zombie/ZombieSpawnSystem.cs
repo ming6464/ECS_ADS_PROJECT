@@ -217,6 +217,9 @@ public partial struct ZombieSpawnSystem : ISystem
             _localTransformDefault.Position = boss.position;
             
             BufferZombieStore zombieDataRandom = GetZombieData(boss.id);
+            
+            if(zombieDataRandom.id != boss.id) continue;
+            
             var zombieInfo = GetZombieInfo(zombieDataRandom, boss.directNormal);
             Entity entityNew = ecb.Instantiate(zombieDataRandom.entity);
             ecb.AddComponent<NotUnique>(entityNew);

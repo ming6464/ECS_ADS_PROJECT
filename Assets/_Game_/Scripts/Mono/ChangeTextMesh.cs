@@ -7,7 +7,7 @@ using UnityEngine;
 
 public class ChangeTextMesh : MonoBehaviour
 {
-    public TextMeshPro textPrefab;
+    public TextTMP_Setup textPrefab;
     //
     private List<TextData> _textDataArr;
     private bool _isInitEvent;
@@ -30,18 +30,20 @@ public class ChangeTextMesh : MonoBehaviour
 
     private void ChangeText(TextMeshData textMeshData,bool disableText)
     {
-        return;
         bool hasData = false;
         foreach (var textData in _textDataArr)
         {
             if (textData.id == textMeshData.id)
             {
                 hasData = true;
-                textData.textMesh.text = textMeshData.text.ToString();
                 if (disableText)
                 {
-                    textData.textMesh.gameObject.SetActive(false);
+                    textData.textTMP.Off();
                     _textDataArr.Remove(textData);
+                }
+                else
+                {
+                    textData.textTMP.ChangeText(textMeshData.text.ToString());
                 }
                 break;
             }
@@ -50,12 +52,12 @@ public class ChangeTextMesh : MonoBehaviour
         if (!hasData && !disableText)
         {
             var textNew = Instantiate(textPrefab, textMeshData.position, quaternion.identity);
-            textNew.transform.parent = transform;
-            textNew.text = textMeshData.text.ToString();
+            textNew.SetUp(textMeshData.offset,textMeshData.textFollowPlayer);
+            textNew.ChangeText(textMeshData.text.ToString());
             _textDataArr.Add(new TextData()
             {
                 id = textMeshData.id,
-                textMesh = textNew
+                textTMP = textNew
             });
         }
     }
@@ -65,5 +67,5 @@ public class ChangeTextMesh : MonoBehaviour
 public struct TextData
 {
     public int id;
-    public TextMeshPro textMesh;
+    public TextTMP_Setup textTMP;
 }

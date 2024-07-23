@@ -24,7 +24,6 @@ namespace _Game_.Scripts.Systems.Player
         private NativeList<TargetInfo> _targetNears;
         private PlayerInput _playerMoveInput;
         private float2 _currentDirectMove;
-        private float _divisionAngle;
         private ComponentTypeHandle<LocalToWorld> _ltwTypeHandle;
         private ComponentTypeHandle<LocalTransform> _ltTypeHandle;
         private ComponentTypeHandle<TakeDamage> _takeDamageTypeHandle;
@@ -51,7 +50,7 @@ namespace _Game_.Scripts.Systems.Player
                 .WithNone<Disabled, SetActiveSP, AddToBuffer>().Build();
             _characterDieQueue = new NativeQueue<Entity>(Allocator.Persistent);
             _enQueryMove = SystemAPI.QueryBuilder().WithAll<CharacterInfo, NextPoint>()
-                .WithNone<Disabled, SetActiveSP>()
+                .WithNone<Disabled, SetActiveSP,AddToBuffer>()
                 .Build();
             _enQueryCharacterMove = SystemAPI.QueryBuilder().WithAll<CharacterInfo>()
                 .WithNone<Disabled, SetActiveSP, AddToBuffer>()
@@ -93,7 +92,6 @@ namespace _Game_.Scripts.Systems.Player
                 _isInit = true;
                 _entityManager = state.EntityManager;
                 _playerProperty = SystemAPI.GetSingleton<PlayerProperty>();
-                _divisionAngle = _playerProperty.divisionAngle;
                 _characterMoveToWardChangePos = _playerProperty.speedMoveToNextPoint;
             }
 
@@ -141,7 +139,6 @@ namespace _Game_.Scripts.Systems.Player
         [BurstCompile]
         private void Rota(ref SystemState state)
         {
-            if (_playerProperty.rotaWithCamera) return;
             var playerLTW = SystemAPI.GetComponentRO<LocalToWorld>(SystemAPI.GetSingletonEntity<PlayerInfo>()).ValueRO;
             var directRota = math.forward();
             var distanceNearest = float.MaxValue;
@@ -183,7 +180,6 @@ namespace _Game_.Scripts.Systems.Player
                 deltaTime = SystemAPI.Time.DeltaTime,
                 directRota = directRota,
                 moveToWard = moveToWard,
-                divisionAngle = _divisionAngle,
             };
             state.Dependency = job.ScheduleParallel(_enQueryCharacterMove, state.Dependency);
             state.Dependency.Complete();
@@ -348,7 +344,6 @@ namespace _Game_.Scripts.Systems.Player
             [ReadOnly] public float deltaTime;
             [ReadOnly] public float3 directRota;
             [ReadOnly] public float moveToWard;
-            [ReadOnly] public float divisionAngle;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
                 in v128 chunkEnabledMask)
@@ -466,7 +461,9 @@ namespace _Game_.Scripts.Systems.Player
                 var lts = chunk.GetNativeArray(ref ltComponentType);
                 var nextPoints = chunk.GetNativeArray(ref nextPointComponentType);
                 var entities = chunk.GetNativeArray(entityTypeHandle);
-
+                
+                if(lts.Length < chunk.Count) return;
+                
                 for (int i = 0; i < chunk.Count; i++)
                 {
                     var lt = lts[i];

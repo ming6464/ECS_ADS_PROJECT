@@ -50,7 +50,6 @@ public partial class AnimationStateSystem : SystemBase
             ecb = ecb.AsParallelWriter(),
             timeDelta = (float)SystemAPI.Time.DeltaTime,
             dieAnimatorParameter = _dieAnimatorParameter,
-            
         };
         Dependency = characterAnimJob.ScheduleParallel(Dependency);
         Dependency.Complete();
@@ -114,9 +113,10 @@ public partial class AnimationStateSystem : SystemBase
                         setAnimation.state = StateID.WaitRemove;
                         ecb.AddComponent(indexQuery, entity, new SetActiveSP()
                         {
-                            state = DisableID.Disable,
+                            state = DisableID.DestroyAll,
                         });
                     }
+
                     break;
                 case StateID.Idle:
                     setAnimation.state = StateID.WaitRemove;
@@ -125,9 +125,8 @@ public partial class AnimationStateSystem : SystemBase
 
             if (setAnimation is { state: StateID.WaitRemove, timeDelay: <= 0 })
             {
-                ecb.RemoveComponent<SetAnimationSP>(indexQuery,entity);
+                ecb.RemoveComponent<SetAnimationSP>(indexQuery, entity);
             }
-            
         }
     }
 
@@ -142,7 +141,9 @@ public partial class AnimationStateSystem : SystemBase
         [ReadOnly] public uint enemyLayer;
         [ReadOnly] public uint enemyDieLayer;
 
-        void Execute(in ZombieInfo zombieInfo,ref LocalTransform lt,ref ZombieRuntime runtime, ref SetAnimationSP setAnimation,Entity entity,[EntityIndexInQuery]int indexQuery  , AnimatorParametersAspect parametersAspect,
+        void Execute(in ZombieInfo zombieInfo, ref LocalTransform lt, ref ZombieRuntime runtime,
+            ref SetAnimationSP setAnimation, Entity entity, [EntityIndexInQuery] int indexQuery,
+            AnimatorParametersAspect parametersAspect,
             ref PhysicsCollider physicsCollider)
         {
             setAnimation.timeDelay -= timeDelta;
@@ -172,10 +173,12 @@ public partial class AnimationStateSystem : SystemBase
                         {
                             state = DisableID.Disable,
                         });
-                    }else if (setAnimation.timeDelay < 0.2f)
-                    {
-                        lt.Position = new float3(999,999,999);
                     }
+                    else if (setAnimation.timeDelay < 0.2f)
+                    {
+                        lt.Position = new float3(999, 999, 999);
+                    }
+
                     break;
                 case StateID.Attack:
                     parametersAspect.SetBoolParameter(attackAnimatorParameter, true);
@@ -184,9 +187,10 @@ public partial class AnimationStateSystem : SystemBase
                         setAnimation.state = StateID.WaitRemove;
                         parametersAspect.SetBoolParameter(attackAnimatorParameter, false);
                     }
+
                     break;
                 case StateID.Run:
-                    parametersAspect.SetBoolParameter(runAnimatorParameter,true);
+                    parametersAspect.SetBoolParameter(runAnimatorParameter, true);
                     setAnimation.state = StateID.WaitRemove;
                     break;
                 case StateID.Idle:
@@ -196,16 +200,14 @@ public partial class AnimationStateSystem : SystemBase
                     setAnimation.state = StateID.WaitRemove;
                     break;
             }
-            
+
             if (setAnimation is { state: StateID.WaitRemove, timeDelay: <= 0 })
             {
-                ecb.RemoveComponent<SetAnimationSP>(indexQuery,entity);
+                ecb.RemoveComponent<SetAnimationSP>(indexQuery, entity);
             }
-
         }
     }
 }
-
 
 //
 [BurstCompile, UpdateInGroup(typeof(PresentationSystemGroup))]
@@ -640,7 +642,7 @@ public partial struct HandlePoolBullet : ISystem
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        if(!CheckAndInit(ref state)) return; 
+        if (!CheckAndInit(ref state)) return;
         if (_currentCountWeaponDisable - _passCountWeaponDisable < _countCheck)
         {
             _bufferBulletDisables.Dispose();
@@ -716,22 +718,22 @@ public partial struct HandlePoolBullet : ISystem
 [UpdateInGroup(typeof(PresentationSystemGroup), OrderLast = true)]
 public partial class UpdateHybrid : SystemBase
 {
-    public int a;
-    // Event {
-    public delegate void EventDataPlayer(Vector3 position,Quaternion rotation);
-    
-    public delegate void EventHitFlashEffect(Vector3 position, Quaternion rotation,EffectID effectID);
 
-    public delegate void EventChangText(TextMeshData textMeshData,bool enable);
+    // Event {
+    public delegate void EventDataPlayer(Vector3 position, Quaternion rotation);
+
+    public delegate void EventHitFlashEffect(Vector3 position, Quaternion rotation, EffectID effectID);
+
+    public delegate void EventChangText(TextMeshData textMeshData, bool enable);
 
     // Event }
-    
+
     // PLayer
     public EventDataPlayer DataPlayer;
 
     private Entity _playerEntity;
     //Player
-    
+
     //Effect {
 
     public EventHitFlashEffect UpdateHitFlashEff;
@@ -747,7 +749,6 @@ public partial class UpdateHybrid : SystemBase
 
     protected override void OnStartRunning()
     {
-        a = 10;
         base.OnStartRunning();
         _effectTypeHandle = GetComponentTypeHandle<EffectComponent>();
         RequireForUpdate<PlayerInfo>();
@@ -760,14 +761,14 @@ public partial class UpdateHybrid : SystemBase
         UpdateEffectEvent();
         UpdateChangeText();
     }
-    
+
 
     private void UpdateDataPlayer()
     {
         LocalToWorld ltw = default;
         if (!_hasPlayerEntity)
         {
-            Entities.ForEach((PlayerInfo info, LocalToWorld ltwPlayer,Entity entity) =>
+            Entities.ForEach((PlayerInfo info, LocalToWorld ltwPlayer, Entity entity) =>
             {
                 ltw = ltwPlayer;
                 _playerEntity = entity;
@@ -781,15 +782,13 @@ public partial class UpdateHybrid : SystemBase
 
         if (_hasPlayerEntity)
         {
-            DataPlayer?.Invoke(ltw.Position,ltw.Rotation);
+            DataPlayer?.Invoke(ltw.Position, ltw.Rotation);
         }
-        
     }
 
     private void UpdateChangeText()
     {
-        return;
-        var ecb = new EntityCommandBuffer(Unity.Collections.Allocator.TempJob);
+        var ecb = new EntityCommandBuffer(Allocator.TempJob);
         Entities.ForEach((ref TextMeshData changeText, ref Entity entity) =>
         {
             bool checkDie = changeText.text.Equals("0");
@@ -809,13 +808,13 @@ public partial class UpdateHybrid : SystemBase
 
     private void UpdateEffectEvent()
     {
-        // return;
         _effectTypeHandle.Update(this);
         EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.TempJob);
-        Entities.ForEach((EffectComponent eff,Entity entity) =>
+        Entities.ForEach((EffectComponent eff, Entity entity) =>
         {
             UpdateHitFlashEff?.Invoke(eff.position, eff.rotation, eff.effectID);
             ecb.RemoveComponent<EffectComponent>(entity);
+            // ecb.DestroyEntity(entity);
         }).WithoutBurst().Run();
         Dependency.Complete();
         ecb.Playback(EntityManager);
@@ -824,7 +823,7 @@ public partial class UpdateHybrid : SystemBase
 
     //JOB
     //JOB
-    
+
     //
     //
 }

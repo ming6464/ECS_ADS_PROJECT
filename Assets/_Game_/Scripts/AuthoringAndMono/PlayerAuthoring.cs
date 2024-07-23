@@ -10,9 +10,7 @@ public class PlayerAuthoring : MonoBehaviour
     public float hp;
     public float speed;
     public float radius;
-    public float rotaAngleMax;
     public AimType aimType;
-    public bool rotaWithCamera;
     //
     public float speedMoveToNextPoint;
     //
@@ -25,7 +23,6 @@ public class PlayerAuthoring : MonoBehaviour
     //
     public int idWeaponDefault;
     //
-    public float divisionAngle;
     [Header("MODE")] public bool autoMoveOnVehicle;
     public NextDestinationInfo[] nextDestinationInfos;
 
@@ -49,12 +46,9 @@ public class PlayerAuthoring : MonoBehaviour
                 moveToWardMin = authoring.moveToWardMin,
                 moveToWardMax = authoring.moveToWardMax,
                 speedMoveToNextPoint = authoring.speedMoveToNextPoint,
-                rotaAngleMax = authoring.rotaAngleMax,
                 hp = authoring.hp,
                 aimNearestEnemy = authoring.aimNearestEnemy,
-                divisionAngle = authoring.divisionAngle,
                 autoMoveOnVehicle = authoring.autoMoveOnVehicle,
-                rotaWithCamera = authoring.rotaWithCamera,
             });
 
             if (authoring.autoMoveOnVehicle)

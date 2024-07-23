@@ -5,6 +5,7 @@ using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
 using UnityEngine;
+using RaycastHit = Unity.Physics.RaycastHit;
 
 [UpdateInGroup(typeof(SimulationSystemGroup))]
 public partial struct PlayerSystem : ISystem
@@ -27,6 +28,7 @@ public partial struct PlayerSystem : ISystem
     private CollisionFilter _filterItem;
     private LayerStoreComponent _layerStore;
     private EntityQuery _entityQuery;
+    private CollisionFilter _collisionFilter;
     
     [BurstCompile]
     public void OnCreate(ref SystemState state)
@@ -50,13 +52,6 @@ public partial struct PlayerSystem : ISystem
         UpdateFieldRunTime(ref state);
         Move(ref state);
         CheckCollider(ref state);
-        Rota(ref state);
-    }
-
-    private void Rota(ref SystemState state)
-    {
-        if(!_playerProperty.rotaWithCamera) return;
-        _playerAspect.Rotation =Quaternion.Euler(_playerMoveInput.angleRota);
     }
 
     [BurstCompile]
