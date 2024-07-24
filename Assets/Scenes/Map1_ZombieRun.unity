@@ -4769,13 +4769,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spawnPosition: {fileID: 809366256}
-  characterPrefab: {fileID: 0}
+  characterPrefab: {fileID: 3836318472321978554, guid: fdd796aa3f41f594baea47b30420e4f8,
+    type: 3}
   hp: 30
   speed: 3.2
   radius: 0.35
   aimType: 0
   speedMoveToNextPoint: 2.5
-  aimNearestEnemy: 0
+  aimNearestEnemy: 1
   rota3D: 0
   distanceAim: 300
   moveToWardMax: 300
@@ -18613,7 +18614,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   defaultLayer:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 1
   playerLayer:
     serializedVersion: 2
     m_Bits: 256

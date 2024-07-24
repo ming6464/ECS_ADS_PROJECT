@@ -163,7 +163,7 @@ namespace _Game_.Scripts.Systems.Player
             var deltaTime = SystemAPI.Time.DeltaTime;
             if (_playerProperty.aimNearestEnemy)
             {
-                bool check = UpdateTargetNears(ref state, playerLTW.Position, ref distanceNearest, ref positionAim,
+                bool check = UpdateTargetNears(ref state, playerLTW, ref distanceNearest, ref positionAim,
                     ref direct, ref speed);
                 if (check)
                 {
@@ -210,7 +210,7 @@ namespace _Game_.Scripts.Systems.Player
         }
 
         [BurstCompile]
-        private bool UpdateTargetNears(ref SystemState state, float3 playerPosition, ref float distanceNearest,
+        private bool UpdateTargetNears(ref SystemState state, LocalToWorld playerLtw, ref float distanceNearest,
             ref float3 positionNearest, ref float3 direct, ref float speed)
         {
             _targetNears.Clear();
@@ -219,20 +219,14 @@ namespace _Game_.Scripts.Systems.Player
                          .WithNone<Disabled, SetActiveSP, AddToBuffer>())
             {
                 var posTarget = ltw.ValueRO.Position;
-
-                float distance = math.distance(playerPosition, posTarget);
+                if (MathExt.CalculateAngle(posTarget - playerLtw.Position, playerLtw.Forward) > 120) continue;
+                float distance = math.distance(playerLtw.Position, posTarget);
 
                 if (distance <= distanceNearest)
                 {
                     distanceNearest = distance;
                     if (_playerProperty.aimType == AimType.TeamAim)
                     {
-                        // if (MathExt.CalculateAngle(posTarget - playerPosition, new float3(0, 0, 1)) < _playerProperty.rotaAngleMax)
-                        // {
-                        //     positionNearest = posTarget;
-                        //     distanceNearest = distance;
-                        //     check = true;
-                        // }
                         positionNearest = posTarget;
                         distanceNearest = distance;
                         direct = zombieInfo.ValueRO.currentDirect;
@@ -240,8 +234,6 @@ namespace _Game_.Scripts.Systems.Player
                         check = true;
                         continue;
                     }
-
-
                     _targetNears.Add(new TargetInfo()
                     {
                         position = posTarget,
@@ -255,19 +247,13 @@ namespace _Game_.Scripts.Systems.Player
                          .WithNone<Disabled, SetActiveSP>())
             {
                 var posTarget = ltw.ValueRO.Position;
-                float distance = math.distance(playerPosition, posTarget);
+                if (MathExt.CalculateAngle(posTarget - playerLtw.Position, playerLtw.Forward) > 120) continue;
+                float distance = math.distance(playerLtw.Position, posTarget);
                 if (distance <= distanceNearest)
                 {
                     distanceNearest = distance;
                     if (_playerProperty.aimType == AimType.TeamAim)
                     {
-                        // if (MathExt.CalculateAngle(posTarget - playerPosition, new float3(0, 0, 1)) < _playerProperty.rotaAngleMax)
-                        // {
-                        //     positionNearest = posTarget;
-                        //     distanceNearest = distance;
-                        //     check = true;
-                        // }
-
                         positionNearest = posTarget;
                         speed = 0;
                         check = true;
