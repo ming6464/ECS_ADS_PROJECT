@@ -18,7 +18,9 @@ public struct PlayerProperty : IComponentData
     public float moveToWardMin;
     public float speedMoveToNextPoint;
     public bool aimNearestEnemy;
+    public bool rota3D;
     public bool autoMoveOnVehicle;
+    
 }
 
 public struct PlayerInfo : IComponentData
@@ -64,16 +66,12 @@ public readonly partial struct PlayerAspect : IAspect
 }
 
 
-
-
 public struct PlayerInput: IComponentData
 {
     public bool pullTrigger;
     public float2 directMove;
-    public float3 mouseScreenPos;
-    public float3 mouseWorldPos;
     public float3 directMouse;
-    public float3 angleRota;
+    public float3 mousePosition;
 }
 
 

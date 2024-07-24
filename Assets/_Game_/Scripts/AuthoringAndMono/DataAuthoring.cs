@@ -7,8 +7,11 @@ namespace _Game_.Scripts.AuthoringAndMono
 {
     public class DataAuthoring : MonoBehaviour
     {
+        [Tooltip("Dữ liệu weapon")]
         public WeaponSO weaponSo;
+        [Tooltip("Dữ liệu zombie")]
         public ZombieSO zombieSo;
+        [Tooltip("Dữ liệu các chướng ngại vật")]
         public ObstacleSO obstacleSo;
         private class DataAuthoringBaker : Baker<DataAuthoring>
         {

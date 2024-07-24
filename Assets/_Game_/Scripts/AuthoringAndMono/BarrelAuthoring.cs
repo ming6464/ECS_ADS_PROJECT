@@ -5,6 +5,7 @@ namespace _Game_.Scripts.ComponentsAndTags.Obstacle
 {
     public class BarrelAuthoring : MonoBehaviour
     {
+        [Tooltip("ID barrel")]
         public int id;
         private class TurretAuthoringBaker : Baker<BarrelAuthoring>
         {

@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class ActiveZoneAuthoring : MonoBehaviour
 {
+    [Tooltip("Vùng hoạt động của zombie nếu zombie ở ngoài cùng pointRangeMin tới pointRangeMax thì sẽ tự động die")]
     public Transform pointRangeMin;
     public Transform pointRangeMax;
 }

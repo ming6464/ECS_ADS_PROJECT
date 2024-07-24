@@ -8,6 +8,7 @@ namespace _Game_.Scripts.AuthoringAndMono
     public class SupportAuthoring : MonoBehaviour
     {
         [Header("Layer")] 
+        public LayerMask defaultLayer;
         public LayerMask playerLayer;
         public LayerMask characterLayer;
         public LayerMask enemyLayer;
@@ -23,6 +24,7 @@ namespace _Game_.Scripts.AuthoringAndMono
                 Entity entity = GetEntity(TransformUsageFlags.None);
                 AddComponent(entity,new LayerStoreComponent()
                 {
+                    defaultLayer = (uint)authoring.defaultLayer.value,
                     playerLayer = (uint)authoring.playerLayer.value,
                     characterLayer = (uint)authoring.characterLayer.value,
                     enemyLayer = (uint)authoring.enemyLayer.value,

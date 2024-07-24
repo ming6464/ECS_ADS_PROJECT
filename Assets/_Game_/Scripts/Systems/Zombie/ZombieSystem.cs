@@ -42,6 +42,8 @@ public partial struct ZombieSystem : ISystem
     private uint _attackHash;
     private uint _finishAttackHash;
     private uint _groundCrackEffectHash;
+    //
+    private int _avoidFrameCheck;
 
     [BurstCompile]
     public void OnCreate(ref SystemState state)
@@ -111,9 +113,16 @@ public partial struct ZombieSystem : ISystem
     [BurstCompile]
     private void AvoidFlock(ref SystemState state)
     {
-        if(!_zombieProperty.comparePriorities) return;
+        _avoidFrameCheck++;
+
+        if (_avoidFrameCheck >= 10)
+        {
+            _avoidFrameCheck -= 4;
+        }
         
-        //UpdatePriority(ref state);
+        if(!_zombieProperty.comparePriorities || _avoidFrameCheck != 0) return;
+        
+        UpdatePriority(ref state);
         
         var avoidDatas = new NativeList<AvoidData>(Allocator.TempJob);
 

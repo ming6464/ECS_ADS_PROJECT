@@ -4,6 +4,7 @@ using Unity.Mathematics;
 
 public struct LayerStoreComponent : IComponentData
 {
+    public uint defaultLayer;
     public uint playerLayer;
     public uint characterLayer;
     public uint enemyLayer;
@@ -37,7 +38,8 @@ public struct SetAnimationSP : IComponentData
 public enum EffectID
 {
     HitFlash = 0,
-    GroundCrack = 1
+    GroundCrack = 1,
+    MetalImpact = 2,
 }
 
 public enum DisableID

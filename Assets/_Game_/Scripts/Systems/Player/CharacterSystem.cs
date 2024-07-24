@@ -4,8 +4,10 @@ using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics;
 using Unity.Transforms;
 using UnityEngine;
+using RaycastHit = Unity.Physics.RaycastHit;
 
 namespace _Game_.Scripts.Systems.Player
 {
@@ -29,6 +31,9 @@ namespace _Game_.Scripts.Systems.Player
         private ComponentTypeHandle<TakeDamage> _takeDamageTypeHandle;
         private ComponentTypeHandle<CharacterInfo> _characterInfoTypeHandle;
         private ComponentTypeHandle<NextPoint> _nextPointTypeHandle;
+        private PhysicsWorldSingleton _physicsWorldSingleton;
+        private LayerStoreComponent _layerStore;
+        private CollisionFilter _filterRota;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -56,6 +61,11 @@ namespace _Game_.Scripts.Systems.Player
                 .WithNone<Disabled, SetActiveSP, AddToBuffer>()
                 .Build();
             _targetNears = new NativeList<TargetInfo>(Allocator.Persistent);
+            _filterRota = new CollisionFilter
+            {
+                BelongsTo = _layerStore.characterLayer,
+                CollidesWith = (_layerStore.defaultLayer|_layerStore.enemyLayer | _layerStore.itemCanShootLayer)
+            };
         }
 
         [BurstCompile]
@@ -65,6 +75,8 @@ namespace _Game_.Scripts.Systems.Player
             state.RequireForUpdate<PlayerInput>();
             state.RequireForUpdate<PlayerInfo>();
             state.RequireForUpdate<CharacterInfo>();
+            state.RequireForUpdate<PhysicsWorldSingleton>();
+            state.RequireForUpdate<LayerStoreComponent>();
         }
 
         [BurstCompile]
@@ -93,6 +105,7 @@ namespace _Game_.Scripts.Systems.Player
                 _entityManager = state.EntityManager;
                 _playerProperty = SystemAPI.GetSingleton<PlayerProperty>();
                 _characterMoveToWardChangePos = _playerProperty.speedMoveToNextPoint;
+                _layerStore = SystemAPI.GetSingleton<LayerStoreComponent>();
             }
 
             _playerMoveInput = SystemAPI.GetSingleton<PlayerInput>();
@@ -139,23 +152,24 @@ namespace _Game_.Scripts.Systems.Player
         [BurstCompile]
         private void Rota(ref SystemState state)
         {
+            _physicsWorldSingleton = SystemAPI.GetSingleton<PhysicsWorldSingleton>();
             var playerLTW = SystemAPI.GetComponentRO<LocalToWorld>(SystemAPI.GetSingletonEntity<PlayerInfo>()).ValueRO;
             var directRota = math.forward();
             var distanceNearest = float.MaxValue;
-            var positionNearest = float3.zero;
+            var positionAim = float3.zero;
             var direct = float3.zero;
             var speed = 0.0f;
             var moveToWard = _playerProperty.moveToWardMax;
             var deltaTime = SystemAPI.Time.DeltaTime;
             if (_playerProperty.aimNearestEnemy)
             {
-                bool check = UpdateTargetNears(ref state, playerLTW.Position, ref distanceNearest, ref positionNearest,
+                bool check = UpdateTargetNears(ref state, playerLTW.Position, ref distanceNearest, ref positionAim,
                     ref direct, ref speed);
                 if (check)
                 {
                     var mulValue = math.remap(0, _playerProperty.distanceAim, 7, 2, distanceNearest);
                     mulValue = math.max(mulValue, 1);
-                    var positionNearestNextFrame = positionNearest + direct * speed * deltaTime * mulValue;
+                    var positionNearestNextFrame = positionAim + direct * speed * deltaTime * mulValue;
                     directRota = positionNearestNextFrame - playerLTW.Position;
                     moveToWard = math.remap(_playerProperty.distanceAim, 0, _playerProperty.moveToWardMin,
                         _playerProperty.moveToWardMax, distanceNearest);
@@ -164,8 +178,16 @@ namespace _Game_.Scripts.Systems.Player
             }
             else
             {
-                directRota = _playerMoveInput.directMouse;
+                var positionSet = playerLTW.Position + math.up();
                 moveToWard = _playerProperty.moveToWardMax;
+                directRota = math.normalize(_playerMoveInput.mousePosition - positionSet);
+                RaycastInput raycastInput = new RaycastInput()
+                {
+                    Start = positionSet,
+                    End = positionSet + directRota * 40,
+                    Filter = _filterRota
+                };
+                positionAim = _physicsWorldSingleton.CastRay(raycastInput, out RaycastHit hit) ? hit.Position : _playerMoveInput.mousePosition;
             }
 
             _ltTypeHandle.Update(ref state);
@@ -180,6 +202,8 @@ namespace _Game_.Scripts.Systems.Player
                 deltaTime = SystemAPI.Time.DeltaTime,
                 directRota = directRota,
                 moveToWard = moveToWard,
+                positionAim = positionAim,
+                rota3D = _playerProperty.rota3D,
             };
             state.Dependency = job.ScheduleParallel(_enQueryCharacterMove, state.Dependency);
             state.Dependency.Complete();
@@ -344,6 +368,8 @@ namespace _Game_.Scripts.Systems.Player
             [ReadOnly] public float deltaTime;
             [ReadOnly] public float3 directRota;
             [ReadOnly] public float moveToWard;
+            [ReadOnly] public float3 positionAim;
+            [ReadOnly] public bool rota3D;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
                 in v128 chunkEnabledMask)
@@ -352,53 +378,68 @@ namespace _Game_.Scripts.Systems.Player
                 var ltws = chunk.GetNativeArray(ref ltwComponentType);
                 for (var i = 0; i < chunk.Count; i++)
                 {
-                    var directRota_ = directRota;
-                    var moveToWard_ = moveToWard;
                     var lt = lts[i];
-
-                    LoadDirectRota(ref directRota_, ref moveToWard_, ltws[i].Position);
-                    if (!directRota_.Equals(float3.zero))
+                    LoadDirectRota(out float3 directRota, out float moveToWard, ltws[i].Position);
+                    if (!directRota.Equals(float3.zero))
                     {
                         lt.Rotation = MathExt.MoveTowards(lt.Rotation,
-                            quaternion.LookRotationSafe(directRota_, math.up()),
-                            deltaTime * moveToWard_);
+                            quaternion.LookRotationSafe(directRota, math.up()),
+                            deltaTime * moveToWard);
                     }
 
                     lts[i] = lt;
                 }
             }
 
-            private void LoadDirectRota(ref float3 directRef, ref float moveToWardRef, float3 characterPos)
+            private void LoadDirectRota(out float3 directRef, out float moveToWardRef, float3 characterPos)
             {
-                if (playerProperty.aimType != AimType.IndividualAim || !aimNearestEnemy) return;
-                var disNearest = float.MaxValue;
-                int indexChoose = -1;
-                directRef = math.forward();
-                moveToWardRef = playerProperty.moveToWardMin;
-                for (int i = 0; i < targetNears.Length; i++)
+                directRef = directRota;
+                moveToWardRef = moveToWard;
+                
+                switch (playerProperty.aimType)
                 {
-                    var enemyPos = targetNears[i];
-                    var distance = math.distance(enemyPos.position, characterPos);
-                    if (distance < disNearest)
-                    {
-                        indexChoose = i;
-                        disNearest = distance;
-                    }
+                    case AimType.IndividualAim:
+                        if (aimNearestEnemy)
+                        {
+                            var disNearest = float.MaxValue;
+                            int indexChoose = -1;
+                            for (int i = 0; i < targetNears.Length; i++)
+                            {
+                                var enemyPos = targetNears[i];
+                                var distance = math.distance(enemyPos.position, characterPos);
+                                if (distance < disNearest)
+                                {
+                                    indexChoose = i;
+                                    disNearest = distance;
+                                }
+                            }
+
+                            if (indexChoose >= 0)
+                            {
+                                var enemyTarget = targetNears[indexChoose];
+                                var mulValue = math.remap(0, playerProperty.distanceAim, 6, 2, disNearest);
+
+                                mulValue = math.max(mulValue, 1);
+
+                                var nearestEnemyPositionNextTime = enemyTarget.position +
+                                                                   enemyTarget.direct * deltaTime * enemyTarget.speed * mulValue;
+                                directRef = nearestEnemyPositionNextTime - characterPos;
+                                moveToWardRef = math.remap(playerProperty.distanceAim, 0, playerProperty.moveToWardMin,
+                                    playerProperty.moveToWardMax, disNearest);
+                            }
+                        }
+                        else
+                        {
+                            directRef = positionAim - characterPos;
+                        }
+                        break;
                 }
 
-                if (indexChoose >= 0)
+                if (!rota3D)
                 {
-                    var enemyTarget = targetNears[indexChoose];
-                    var mulValue = math.remap(0, playerProperty.distanceAim, 6, 2, disNearest);
-
-                    mulValue = math.max(mulValue, 1);
-
-                    var nearestEnemyPositionNextTime = enemyTarget.position +
-                                                       enemyTarget.direct * deltaTime * enemyTarget.speed * mulValue;
-                    directRef = nearestEnemyPositionNextTime - characterPos;
-                    moveToWardRef = math.remap(playerProperty.distanceAim, 0, playerProperty.moveToWardMin,
-                        playerProperty.moveToWardMax, disNearest);
+                    directRef.y = 0;
                 }
+                
             }
         }
 

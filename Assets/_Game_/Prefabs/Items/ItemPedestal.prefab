@@ -111,7 +111,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2115340189055488288}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -1.5, y: 0.122, z: 149.28}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
@@ -189,7 +189,7 @@ MonoBehaviour:
   count: 0
   operation: 0
   textPositon: {fileID: 2667146269360124253}
-  followPlayer: 1
+  followPlayer: 0
   spawnPoints:
   - {fileID: 8568189371391832198}
   - {fileID: 1780348587657674778}
@@ -241,8 +241,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.8, y: 3, z: 0.8}
-  m_Center: {x: -0.03815958, y: 0.50184727, z: -0.03703566}
+  m_Size: {x: 0.5774143, y: 3.0000002, z: 0.53389823}
+  m_Center: {x: -0.00031650066, y: 0.50184727, z: -0.005744949}
 --- !u!1 &2459892791278604533
 GameObject:
   m_ObjectHideFlags: 0

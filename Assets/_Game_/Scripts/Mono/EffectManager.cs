@@ -4,29 +4,7 @@ using UnityEngine;
 
 public class EffectManager : MonoBehaviour
 {
-    [Serializable]
-    public class EffectInfo
-    {
-        public ParticleSystem eff;
-        public EffectID effectID;
-        public Transform _tf;
-
-        public void Play(Vector3 position, Quaternion rotation)
-        {
-            if(!eff) return;
-            if (!_tf)
-            {
-                _tf = eff.GetComponent<Transform>();
-            }
-
-            _tf.position = position;
-            _tf.rotation = rotation;
-            eff.Emit(1);
-        }
-        
-    }
-    
-    public EffectInfo[] effectInfos;
+    public effectInfo[] effectInfos;
     private bool _isAddEvent;
     
     private void Update()
@@ -44,21 +22,28 @@ public class EffectManager : MonoBehaviour
     {
         foreach (var i in effectInfos)
         {
-            if (i.effectID == effectID)
+            if (i.effect.effectID == effectID)
             {
-                if(!i.eff) return;
-                if (!i._tf)
+                if (i.effect.pushToPoolWhenFinish)
                 {
-                    i._tf = i.eff.GetComponent<Transform>();
+                    var eff = ObjectPool.Instance.PopFromPool(effectID, i.gameObject);
+                    eff.SetActive(true);
+                    eff.GetComponent<Effect>().Play(position,rotation);
                 }
-
-                i._tf.position = position;
-                i._tf.rotation = rotation;
-                i.eff.Emit(1);
+                else
+                {
+                    i.effect.Play(position,rotation);
+                }
+                
             }
         }
     }
     
-    
+    [Serializable]
+    public struct effectInfo
+    {
+        public Effect effect;
+        public GameObject gameObject;
+    }
     
 }

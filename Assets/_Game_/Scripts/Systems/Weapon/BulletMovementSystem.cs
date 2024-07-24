@@ -5,7 +5,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
-using UnityEngine;
 using Random = Unity.Mathematics.Random;
 using RaycastHit = Unity.Physics.RaycastHit;
 
@@ -123,11 +122,29 @@ public partial struct BulletMovementSystem : ISystem
     {
         if (_takeDamageQueue.Count > 0)
         {
+            var eff = new EffectComponent()
+            {
+                
+            };
             while(_takeDamageQueue.TryDequeue(out var item))
             {
                 if (item.damage == 0) continue;
 
-                var damage = _entityManager.HasComponent<ItemCanShoot>(item.entity) ? 1 : item.damage;
+                var checkItem = _entityManager.HasComponent<ItemCanShoot>(item.entity);
+                var damage = checkItem ? 1 : item.damage;
+                eff.rotation = item.rotation;
+                eff.position = item.position;
+                if (checkItem)
+                {
+                    eff.effectID = EffectID.MetalImpact;
+                }
+                else
+                {
+                    eff.effectID = EffectID.HitFlash;
+                }
+                
+                
+                ecb.AddComponent(item.entity,eff);
                 if (_takeDamageMap.ContainsKey(item.entity))
                 {
                     _takeDamageMap[item.entity] += damage;
@@ -175,11 +192,7 @@ public partial struct BulletMovementSystem : ISystem
             {
                 state = DisableID.Disable,
             };
-
-            var eff = new EffectComponent()
-            {
-                effectID = EffectID.HitFlash,
-            };
+            
             for (int i = 0; i < chunk.Count; i++)
             {
 
@@ -213,14 +226,13 @@ public partial struct BulletMovementSystem : ISystem
                     {
                         damage = bulletInfo.damage,
                         entity = hit.Entity,
+                        position = hit.Position,
+                        rotation = quaternion.LookRotationSafe(hit.SurfaceNormal,math.up()),
                     });
                     lt.Position = new float3(999, 999, 999);
                     ecb.SetComponent(unfilteredChunkIndex,entity,lt);
                     ecb.AddComponent<AddToBuffer>(unfilteredChunkIndex,entity);
                     ecb.AddComponent(unfilteredChunkIndex, entity, setActiveSP);
-                    eff.position = hit.Position;
-                    eff.rotation = quaternion.LookRotationSafe(hit.SurfaceNormal, math.up());
-                    ecb.AddComponent(unfilteredChunkIndex, ecb.CreateEntity(unfilteredChunkIndex), eff);
                 }
                 else
                 {
@@ -239,6 +251,8 @@ public partial struct BulletMovementSystem : ISystem
     {
         public Entity entity;
         public float damage;
+        public float3 position;
+        public quaternion rotation;
     }
     
     // structs }

@@ -5,20 +5,38 @@ using UnityEngine;
 
 public class ItemAuthoring : MonoBehaviour
 {
+    [Tooltip("Xác định loại item của đối tượng.")]
     public ItemType type;
+
+    [Tooltip("Xác định cách sử dụng của item.")]
     public TypeUsing typeUsing;
+
+    [Tooltip("ID duy nhất của item.")]
     public int id;
+
     [Header("Setup")]
     [Space(10)]
+    [Tooltip("Nếu item là loại bắn đạn để sử dụng thì số này sẽ là số hp của nó\nNếu item là loại khi sử dụng sẽ tăng số lượng nhân vật thì số này sẽ là số để tính toán")]
     public int count;
+
+    [Tooltip("Xác định loại phép tính đến item.")]
     public Operation operation;
+
+    [Tooltip("Vị trí của text liên quan đến item.")]
     public Transform textPositon;
+
+    [Tooltip("Xác định liệu item có xoay theo hướng người chơi hay không.")]
     public bool followPlayer;
+
     [Header("Item Obstacle")]
+    [Tooltip("Mảng các điểm spawn cho item.\nví dụ: item pháo, khi đây là mảng các vị trí sẽ spawn ra chúng")]
     public Transform[] spawnPoints;
-    [Header("------")] 
+
+    [Header("-----Phần này bỏ qua-----")]
+    [Tooltip("Mảng các thiết lập thông tin item cho vũ khí.")]
     public ItemInfoSetup[] weapons;
     public Animator animator;
+
     private int _passIdWeapon;
     private ItemType _passItemType;
     private void OnValidate()
